@@ -1,0 +1,22 @@
+{
+  "name": "upnp-device-client",
+  "version": "0.0.1",
+  "description": "A simple and versatile UPnP device client",
+  "author": "thibauts",
+  "license": "MIT",
+  "main": "index.js",
+  "dependencies": {
+    "elementtree": "~0.1.6"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/thibauts/node-upnp-device-client.git"
+  },
+  "keywords": [
+    "upnp",
+    "dlna"
+  ]
+}
