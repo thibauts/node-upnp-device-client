@@ -86,7 +86,10 @@ DeviceClient.prototype.callAction = function(serviceId, actionName, params, call
 
     Object.keys(params).forEach(function(paramName) {
       var tmp = et.SubElement(action, paramName);
-      tmp.text = params[paramName].toString()
+      var value = params[paramName];
+      tmp.text = (value === null)
+        ? '' 
+        : params[paramName].toString();
     });
 
     var doc = new et.ElementTree(envelope);
