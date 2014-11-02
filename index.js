@@ -44,10 +44,7 @@ DeviceClient.prototype.getServiceDescription = function(serviceId, callback) {
 
     // Use cache if available
     if(self.serviceDescriptions[serviceId]) {
-      process.nextTick(function() {
-        callback(null, self.serviceDescriptions[serviceId]);
-      });
-      return;
+      return callback(null, self.serviceDescriptions[serviceId]);
     }
 
     fetchServiceDescription(service.SCPDURL, function(err, desc) {
