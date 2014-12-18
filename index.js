@@ -303,10 +303,12 @@ function extractFields(node, fields) {
 function buildAbsoluteUrl(base, url) {
   if(url === '') return '';
   if(url.substring(0, 4) === 'http') return url;
-  if(url[0] !== '/') {
-    url = '/' + url;
+  if(url[0] === '/') {
+    var root = base.split('/').slice(0, 3).join('/'); // http://host:port
+    return root + url;
+  } else {
+    return base + '/' + url;
   }
-  return base + url;
 }
 
 function extractBaseUrl(url) {
