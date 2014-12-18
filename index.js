@@ -304,6 +304,9 @@ function extractFields(node, fields) {
 function buildAbsoluteUrl(base, url) {
   if(url === '') return '';
   if(url.substring(0, 4) === 'http') return url;
+  if(url[0] !== '/') {
+    url = '/' + url;
+  }
   return base + url;
 }
 
