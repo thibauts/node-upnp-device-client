@@ -198,8 +198,7 @@ function fetchDeviceDescription(url, callback) {
     });
 
     // Make URLs absolute
-    var parsed = parseUrl(url);
-    var baseUrl = parsed.protocol + '//' + parsed.host;
+    var baseUrl = extractBaseUrl(url);
 
     desc.icons.map(function(icon) {
       icon.url = buildAbsoluteUrl(baseUrl, icon.url);
@@ -308,6 +307,10 @@ function buildAbsoluteUrl(base, url) {
     url = '/' + url;
   }
   return base + url;
+}
+
+function extractBaseUrl(url) {
+  return url.split('/').slice(0, -1).join('/');
 }
 
 module.exports = DeviceClient;
