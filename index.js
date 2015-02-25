@@ -91,7 +91,7 @@ DeviceClient.prototype.callAction = function(serviceId, actionName, params, call
 
     var doc = new et.ElementTree(envelope);
     var xml = doc.write({ 
-      xml_delaration: true,
+      xml_declaration: true,
     });
 
     // Send action request
