@@ -1,6 +1,6 @@
 {
   "name": "upnp-device-client",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "A simple and versatile UPnP device client",
   "author": "thibauts",
   "license": "MIT",
