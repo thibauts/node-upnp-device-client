@@ -2,7 +2,7 @@ upnp-device-client
 ==================
 ### A simple and versatile UPnP device client
 
-This module can query UPnP devices descriptions, service descriptions and call actions on services. It doesn't implement event subscriptions for now, but I'm open to pull requests.
+This module can query UPnP devices descriptions, service descriptions and call actions on services. It also provides a simple interface to subscribe to UPnP services events.
 
 Installation
 ------------
@@ -37,4 +37,10 @@ client.callAction('AVTransport', 'GetMediaInfo', { InstanceID: 0 }, function(err
   if(err) throw err;
   console.log(result); // => { NrTracks: '1', MediaDuration: ... }
 });
+
+client.subscribe('AVTransport', function(e) {
+  console.log(e); // Will receive events like { InstanceID: 0, TransportState: 'PLAYING' } when playing media
+});
+
+// client.unsubscribe('AVTransport', listener);
 ```
