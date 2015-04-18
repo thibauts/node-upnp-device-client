@@ -263,6 +263,11 @@ function parseServiceDescription(xml) {
 
 function fetch(url, callback) {
   var req = http.get(url, function(res) {
+    if(res.statusCode !== 200) {
+      var err = new Error('Request failed');
+      err.statusCode = res.statusCode;
+      return callback(err);
+    }
     res.pipe(concat(function(buf) {
       callback(null, buf.toString())
     }));
