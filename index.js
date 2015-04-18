@@ -20,9 +20,10 @@ DeviceClient.prototype.getDeviceDescription = function(callback) {
     return;
   }
 
-  fetchDeviceDescription(this.url, function(err, desc) {
+  fetch(this.url, function(err, body) {
     if(err) return callback(err);
-    self.deviceDescription = desc; // Store in cache for next call
+    var desc = parseDeviceDescription(body, self.url);
+    self.deviceDescription = desc // Store in cache for next call
     callback(null, desc);
   });
 };
@@ -48,8 +49,9 @@ DeviceClient.prototype.getServiceDescription = function(serviceId, callback) {
       return callback(null, self.serviceDescriptions[serviceId]);
     }
 
-    fetchServiceDescription(service.SCPDURL, function(err, desc) {
+    fetch(service.SCPDURL, function(err, body) {
       if(err) return callback(err);
+      var desc = parseServiceDescription(body);
       self.serviceDescriptions[serviceId] = desc; // Store in cache for next call
       callback(null, desc);
     });
@@ -141,125 +143,115 @@ DeviceClient.prototype.callAction = function(serviceId, actionName, params, call
   });
 };
 
+function parseDeviceDescription(xml, url) {
+  var doc = et.parse(xml);
 
-function fetchDeviceDescription(url, callback) {
-  fetch(url, function(err, body) {
-    if(err) return callback(err);
+  var desc = extractFields(doc.find('./device'), [
+    'deviceType', 
+    'friendlyName', 
+    'manufacturer', 
+    'manufacturerURL', 
+    'modelName', 
+    'modelNumber', 
+    'UDN'
+  ]);
 
-    var doc = et.parse(body);
+  var nodes = doc.findall('./device/iconList/icon');
+  desc.icons = nodes.map(function(icon) {
+    return extractFields(icon, [
+      'mimetype',
+      'width',
+      'height',
+      'depth',
+      'url'
+    ]);
+  });
 
-    var desc = extractFields(doc.find('./device'), [
-      'deviceType', 
-      'friendlyName', 
-      'manufacturer', 
-      'manufacturerURL', 
-      'modelName', 
-      'modelNumber', 
-      'UDN'
+  var nodes = doc.findall('./device/serviceList/service');
+  desc.services = {};
+  nodes.forEach(function(service) {
+    var tmp = extractFields(service, [
+      'serviceType',
+      'serviceId',
+      'SCPDURL',
+      'controlURL',
+      'eventSubURL'
     ]);
 
-    var nodes = doc.findall('./device/iconList/icon');
-    desc.icons = nodes.map(function(icon) {
-      return extractFields(icon, [
-        'mimetype',
-        'width',
-        'height',
-        'depth',
-        'url'
-      ]);
-    });
-
-    var nodes = doc.findall('./device/serviceList/service');
-    desc.services = {};
-    nodes.forEach(function(service) {
-      var tmp = extractFields(service, [
-        'serviceType',
-        'serviceId',
-        'SCPDURL',
-        'controlURL',
-        'eventSubURL'
-      ]);
-
-      var id = tmp.serviceId;
-      delete tmp.serviceId;
-      desc.services[id] = tmp;
-    });
-
-    // Make URLs absolute
-    var baseUrl = extractBaseUrl(url);
-
-    desc.icons.map(function(icon) {
-      icon.url = buildAbsoluteUrl(baseUrl, icon.url);
-      return icon;
-    });
-
-    Object.keys(desc.services).forEach(function(id) {
-      var service = desc.services[id];
-      service.SCPDURL = buildAbsoluteUrl(baseUrl, service.SCPDURL);
-      service.controlURL = buildAbsoluteUrl(baseUrl, service.controlURL);
-      service.eventSubURL = buildAbsoluteUrl(baseUrl, service.eventSubURL);
-    });
-
-    callback(null, desc);
+    var id = tmp.serviceId;
+    delete tmp.serviceId;
+    desc.services[id] = tmp;
   });
+
+  // Make URLs absolute
+  var baseUrl = extractBaseUrl(url);
+
+  desc.icons.map(function(icon) {
+    icon.url = buildAbsoluteUrl(baseUrl, icon.url);
+    return icon;
+  });
+
+  Object.keys(desc.services).forEach(function(id) {
+    var service = desc.services[id];
+    service.SCPDURL = buildAbsoluteUrl(baseUrl, service.SCPDURL);
+    service.controlURL = buildAbsoluteUrl(baseUrl, service.controlURL);
+    service.eventSubURL = buildAbsoluteUrl(baseUrl, service.eventSubURL);
+  });
+
+  return desc;
 }
 
-function fetchServiceDescription(url, callback) {
-  fetch(url, function(err, body) {
-    if(err) return callback(err);
+function parseServiceDescription(xml) {
+  var doc = et.parse(xml);
+  var desc = {};
 
-    var doc = et.parse(body);
+  desc.actions = {};
+  var nodes = doc.findall('./actionList/action');
+  nodes.forEach(function(action) {
+    var name = action.findtext('./name');
+    var inputs = [];
+    var outputs = [];
 
-    var desc = {};
+    var nodes = action.findall('./argumentList/argument');
+    nodes.forEach(function(argument) {
+      var arg = extractFields(argument, [
+        'name',
+        'direction',
+        'relatedStateVariable'
+      ]);
 
-    desc.actions = {};
-    var nodes = doc.findall('./actionList/action');
-    nodes.forEach(function(action) {
-      var name = action.findtext('./name');
-      var inputs = [];
-      var outputs = [];
+      var direction = arg.direction;
+      delete arg.direction;
 
-      var nodes = action.findall('./argumentList/argument');
-      nodes.forEach(function(argument) {
-        var arg = extractFields(argument, [
-          'name',
-          'direction',
-          'relatedStateVariable'
-        ]);
-
-        var direction = arg.direction;
-        delete arg.direction;
-
-        if(direction === 'in') inputs.push(arg);
-        else outputs.push(arg);
-      });
-
-      desc.actions[name] = {
-        inputs: inputs,
-        outputs: outputs
-      };
+      if(direction === 'in') inputs.push(arg);
+      else outputs.push(arg);
     });
 
-    desc.stateVariables = {};
-    var nodes = doc.findall('./serviceStateTable/stateVariable');
-    nodes.forEach(function(stateVariable) {
-      var name = stateVariable.findtext('./name');
-
-      var nodes = stateVariable.findall('./allowedValueList/allowedValue');
-      var allowedValues = nodes.map(function(allowedValue) {
-        return allowedValue.text;
-      });
-
-      desc.stateVariables[name] = {
-        dataType: stateVariable.findtext('./dataType'),
-        sendEvents: stateVariable.get('sendEvents'),
-        allowedValues: allowedValues,
-        defaultValue: stateVariable.findtext('./defaultValue')
-      };
-    });
-
-    callback(null, desc);
+    desc.actions[name] = {
+      inputs: inputs,
+      outputs: outputs
+    };
   });
+
+  desc.stateVariables = {};
+  var nodes = doc.findall('./serviceStateTable/stateVariable');
+  nodes.forEach(function(stateVariable) {
+    var name = stateVariable.findtext('./name');
+
+    var nodes = stateVariable.findall('./allowedValueList/allowedValue');
+    var allowedValues = nodes.map(function(allowedValue) {
+      return allowedValue.text;
+    });
+
+    desc.stateVariables[name] = {
+      dataType: stateVariable.findtext('./dataType'),
+      sendEvents: stateVariable.get('sendEvents'),
+      allowedValues: allowedValues,
+      defaultValue: stateVariable.findtext('./defaultValue')
+    };
+  });
+
+  return desc;
 }
 
 function fetch(url, callback) {
