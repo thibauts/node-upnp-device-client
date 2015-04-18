@@ -96,20 +96,14 @@ DeviceClient.prototype.callAction = function(serviceId, actionName, params, call
     });
 
     // Send action request
-    var parsed = parseUrl(service.controlURL);
-
-    var options = {
-      hostname: parsed.hostname,
-      port: parsed.port,
-      path: parsed.path,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/xml; charset="utf-8"',
-        'Content-Length': xml.length,
-        'Connection': 'close',
-        'SOAPACTION': '"' + service.serviceType + '#' + actionName + '"'
-      }
-    }
+    var options = parseUrl(service.controlURL);
+    options.method = 'POST';
+    options.headers = {
+      'Content-Type': 'text/xml; charset="utf-8"',
+      'Content-Length': xml.length,
+      'Connection': 'close',
+      'SOAPACTION': '"' + service.serviceType + '#' + actionName + '"'
+    };
 
     var req = http.request(options, function(res) {
       res.pipe(concat(function(buf) {
