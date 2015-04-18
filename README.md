@@ -39,7 +39,8 @@ client.callAction('AVTransport', 'GetMediaInfo', { InstanceID: 0 }, function(err
 });
 
 client.subscribe('AVTransport', function(e) {
-  console.log(e); // Will receive events like { InstanceID: 0, TransportState: 'PLAYING' } when playing media
+  // Will receive events like { InstanceID: 0, TransportState: 'PLAYING' } when playing media
+  console.log(e); 
 });
 
 // client.unsubscribe('AVTransport', listener);
