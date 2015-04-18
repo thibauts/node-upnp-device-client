@@ -4,8 +4,8 @@ upnp-device-client
 
 This module can query UPnP devices descriptions, service descriptions and call actions on services. It also provides a simple interface to subscribe to UPnP services events.
 
-Installation
-------------
+Install
+-------
 
 ```bash
 $ npm install upnp-device-client
@@ -44,4 +44,10 @@ client.subscribe('AVTransport', function(e) {
 });
 
 // client.unsubscribe('AVTransport', listener);
+```
+
+Run with debug traces
+
+```bash
+$ DEBUG=* node index.js
 ```
