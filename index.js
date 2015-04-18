@@ -3,11 +3,13 @@ var et = require('elementtree');
 var parseUrl = require('url').parse;
 var concat = require('concat-stream');
 
+
 function DeviceClient(url) {
   this.url = url;
   this.deviceDescription = null;
   this.serviceDescriptions = {};
 }
+
 
 DeviceClient.prototype.getDeviceDescription = function(callback) {
   var self = this;
@@ -27,6 +29,7 @@ DeviceClient.prototype.getDeviceDescription = function(callback) {
     callback(null, desc);
   });
 };
+
 
 DeviceClient.prototype.getServiceDescription = function(serviceId, callback) {
   var self = this;
@@ -57,6 +60,7 @@ DeviceClient.prototype.getServiceDescription = function(serviceId, callback) {
     });
   });
 };
+
 
 DeviceClient.prototype.callAction = function(serviceId, actionName, params, callback) {
   var self = this;
@@ -143,6 +147,7 @@ DeviceClient.prototype.callAction = function(serviceId, actionName, params, call
   });
 };
 
+
 function parseDeviceDescription(xml, url) {
   var doc = et.parse(xml);
 
@@ -201,6 +206,7 @@ function parseDeviceDescription(xml, url) {
   return desc;
 }
 
+
 function parseServiceDescription(xml) {
   var doc = et.parse(xml);
   var desc = {};
@@ -254,6 +260,7 @@ function parseServiceDescription(xml) {
   return desc;
 }
 
+
 function fetch(url, callback) {
   var req = http.get(url, function(res) {
     res.pipe(concat(function(buf) {
@@ -265,6 +272,7 @@ function fetch(url, callback) {
   req.end();
 }
 
+
 function extractFields(node, fields) {
   var data = {};
   fields.forEach(function(field) {
@@ -272,6 +280,7 @@ function extractFields(node, fields) {
   });
   return data;
 }
+
 
 function buildAbsoluteUrl(base, url) {
   if(url === '') return '';
@@ -284,8 +293,10 @@ function buildAbsoluteUrl(base, url) {
   }
 }
 
+
 function extractBaseUrl(url) {
   return url.split('/').slice(0, -1).join('/');
 }
+
 
 module.exports = DeviceClient;
