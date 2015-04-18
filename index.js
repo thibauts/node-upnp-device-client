@@ -1,6 +1,7 @@
 var http = require('http');
 var et = require('elementtree');
 var parseUrl = require('url').parse;
+var concat = require('concat-stream');
 
 function DeviceClient(url) {
   this.url = url;
@@ -111,14 +112,7 @@ DeviceClient.prototype.callAction = function(serviceId, actionName, params, call
     }
 
     var req = http.request(options, function(res) {
-      var chunks = [];
-
-      res.on('data', function(chunk) {
-        chunks.push(chunk);
-      });
-
-      res.on('end', function() {
-        var buf = Buffer.concat(chunks);
+      res.pipe(concat(function(buf) {
         var doc = et.parse(buf.toString());
 
         if(res.statusCode !== 200) {
@@ -144,8 +138,8 @@ DeviceClient.prototype.callAction = function(serviceId, actionName, params, call
           result[name] = doc.findtext('.//' + name);
         });
 
-        callback(null, result)
-      });
+        callback(null, result)        
+      }));
     });
 
     req.on('error', callback);
@@ -276,16 +270,9 @@ function fetchServiceDescription(url, callback) {
 
 function fetch(url, callback) {
   var req = http.get(url, function(res) {
-    var chunks = [];
-
-    res.on('data', function(chunk) {
-      chunks.push(chunk);
-    });
-
-    res.on('end', function() {
-      var buf = Buffer.concat(chunks);
+    res.pipe(concat(function(buf) {
       callback(null, buf.toString())
-    });
+    }));
   });
 
   req.on('error', callback);

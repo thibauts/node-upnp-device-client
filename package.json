@@ -6,6 +6,7 @@
   "license": "MIT",
   "main": "index.js",
   "dependencies": {
+    "concat-stream": "^1.4.8",
     "elementtree": "~0.1.6"
   },
   "scripts": {
