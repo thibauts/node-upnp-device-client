@@ -441,7 +441,8 @@ function parseDeviceDescription(xml, url) {
     'manufacturer', 
     'manufacturerURL', 
     'modelName', 
-    'modelNumber', 
+    'modelNumber',
+    'modelDescription',
     'UDN'
   ]);
 
@@ -565,7 +566,10 @@ function fetch(url, callback) {
 function extractFields(node, fields) {
   var data = {};
   fields.forEach(function(field) {
-    data[field] = node.findtext('./' + field);
+    var value = node.findtext('./' + field);
+    if(typeof value !== 'undefined') {
+      data[field] = value;
+    }
   });
   return data;
 }
