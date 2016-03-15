@@ -441,7 +441,8 @@ function parseDeviceDescription(xml, url) {
     'manufacturer', 
     'manufacturerURL', 
     'modelName', 
-    'modelNumber', 
+    'modelNumber',
+    'modelDescription',
     'UDN'
   ]);
 
