@@ -212,6 +212,7 @@ DeviceClient.prototype.subscribe = function(serviceId, listener) {
           err.statusCode = res.statusCode;
           self.releaseEventingServer();
           self.emit('error', err);
+          return;
         }
 
         var sid = res.headers['sid'];
@@ -234,6 +235,7 @@ DeviceClient.prototype.subscribe = function(serviceId, listener) {
               err.statusCode = res.statusCode;
               // XXX: should we clear the subscription and release the server here ?
               self.emit('error', err);
+              return;
             }
 
             var timeout = parseTimeout(res.headers['timeout']);
