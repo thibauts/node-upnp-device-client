@@ -5,7 +5,7 @@ var et = require('elementtree');
 var parseUrl = require('url').parse;
 var os = require('os');
 var concat = require('concat-stream');
-var address = require('network-address');
+var ip = require('ip');
 var debug = require('debug')('upnp-device-client');
 var pkg = require('./package.json');
 
@@ -369,7 +369,9 @@ DeviceClient.prototype.ensureEventingServer = function(callback) {
 
     });
 
-    this.server.listen(0, address.ipv4());
+    // be sure that we are listening on the correct interface where the client resides
+    var iface = this.getIfaceForUrl(this.url);
+    this.server.listen(0, ip.address(iface));
   }
 
   if(!this.listening) {
@@ -390,6 +392,27 @@ DeviceClient.prototype.releaseEventingServer = function() {
     this.server = null;
     this.listening = false;
   }
+};
+
+
+DeviceClient.prototype.getIfaceForUrl = function(_url) {  
+    var options = parseUrl(_url);
+    var interfaces = os.networkInterfaces();
+    var retIface = "";
+    
+    Object.keys(interfaces).map(function (nic) {
+        for (var i = 0; i < interfaces[nic].length; i++) 
+        {            
+            if(interfaces[nic][i].family.toLowerCase() == "ipv4")
+            {
+                var base1 = ip.mask(interfaces[nic][i].address, interfaces[nic][i].netmask);    
+                var base2 = ip.mask(options.hostname, interfaces[nic][i].netmask); // TODO: maybe resolve IP here from hostname if hostname is not an ip
+                if (base1 == base2)
+                    retIface = nic;
+            }
+        }
+    });
+    return retIface;
 };
 
 
