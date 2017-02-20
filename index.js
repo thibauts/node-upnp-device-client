@@ -364,6 +364,9 @@ DeviceClient.prototype.ensureEventingServer = function(callback) {
             listener(e);
           });
         });
+        
+        // be sure we quit response by sending back a 200 OK, otherwise well developed UPNP Devices will kick us out of their subscription list
+        res.end();
 
       }));
 
