@@ -459,7 +459,7 @@ function parseDeviceDescription(xml, url) {
     ]);
   });
 
-  var nodes = doc.findall('./device/serviceList/service');
+  nodes = doc.findall('.//device/serviceList/service');
   desc.services = {};
   nodes.forEach(function(service) {
     var tmp = extractFields(service, [
