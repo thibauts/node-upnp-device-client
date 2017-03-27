@@ -24,6 +24,7 @@ function DeviceClient(url) {
   this.server = null;
   this.listening = false;
   this.subscriptions = {};
+  this.pendingUnsubscriptions = {};
 }
 
 util.inherits(DeviceClient, EventEmitter);
@@ -130,17 +131,17 @@ DeviceClient.prototype.callAction = function(serviceId, actionName, params, call
 
     debug('call action %s on service %s with params %j', actionName, serviceId, params);
 
-    var req = http.request(options, function(res) {
-      res.pipe(concat(function(buf) {
+    var req = http.request(options, function(req) {
+      req.pipe(concat(function(buf) {
         var doc = et.parse(buf.toString());
 
-        if(res.statusCode !== 200) {
+        if(req.statusCode !== 200) {
           var errorCode = doc.findtext('.//errorCode');
           var errorDescription = doc.findtext('.//errorDescription').trim();
 
           var err = new Error(errorDescription + ' (' + errorCode + ')');
           err.code = 'EUPNP';
-          err.statusCode = res.statusCode;
+          err.statusCode = req.statusCode;
           err.errorCode = errorCode;
           return callback(err);
         }
@@ -171,6 +172,11 @@ DeviceClient.prototype.subscribe = function(serviceId, listener) {
   var self = this;
   serviceId = resolveService(serviceId);
 
+  if(this.pendingUnsubscriptions[serviceId]) {
+    this.once('unsubscribed:' + serviceId, function () {
+      self.subscribe(serviceId, listener);
+    });
+  }
   if(this.subscriptions[serviceId]) {
     // If we already have a subscription to this service,
     // add the provided callback to the listeners and return
@@ -233,6 +239,7 @@ DeviceClient.prototype.subscribe = function(serviceId, listener) {
             if(res.statusCode !== 200) {
               var err = new Error('SUBSCRIBE renewal error');
               err.statusCode = res.statusCode;
+              console.log('SUBSCRIBE renewal error', res);
               // XXX: should we clear the subscription and release the server here ?
               self.emit('error', err);
               return;
@@ -264,6 +271,8 @@ DeviceClient.prototype.subscribe = function(serviceId, listener) {
           listeners: [listener]
         };
 
+        console.log('SUBSCRIBED', serviceId);
+
       });
 
       req.on('error', function(err) {
@@ -289,6 +298,9 @@ DeviceClient.prototype.unsubscribe = function(serviceId, listener) {
   // ... and we know about this listener
   var idx = subscription.listeners.indexOf(listener);
   if(idx === -1) return;
+
+  // Then register the subscription to an unsubscribe list to prevent race conditions with subscribe
+  this.pendingUnsubscriptions[serviceId] = true;
 
   // Remove the listener from the list
   subscription.listeners.splice(idx, 1);
@@ -317,10 +329,16 @@ DeviceClient.prototype.unsubscribe = function(serviceId, listener) {
       // Make sure the eventing server is shutdown if there is no
       // subscription left for any service
       self.releaseEventingServer();
+
+      delete self.pendingUnsubscriptions[serviceId];
+      self.emit('unsubscribed:' + serviceId);
+      console.log('UNSUBSCRIBED', serviceId);
     });
 
     req.on('error', function(err) {
       self.emit('error', err);
+      delete this.pendingUnsubscriptions[serviceId];
+      self.emit('unsubscribed:' + serviceId);
     });
 
     req.end(); 
@@ -347,6 +365,7 @@ DeviceClient.prototype.ensureEventingServer = function(callback) {
           return self.subscriptions[key].sid;
         })
 
+        console.log(sid, seq, events);
         var idx = sids.indexOf(sid);
         if(idx === -1) {
           debug('WARNING unknown SID %s', sid);
@@ -365,6 +384,9 @@ DeviceClient.prototype.ensureEventingServer = function(callback) {
           });
         });
 
+        // Send 200 response to UPnP device
+        res.statusCode = 200;
+        res.end()
       }));
 
     });
@@ -448,7 +470,7 @@ function parseDeviceDescription(xml, url) {
     'UDN'
   ]);
 
-  var nodes = doc.findall('./device/iconList/icon');
+  var nodes = doc.findall('.//device/iconList/icon');
   desc.icons = nodes.map(function(icon) {
     return extractFields(icon, [
       'mimetype',
