@@ -110,12 +110,12 @@ DeviceClient.prototype.callAction = function(serviceId, actionName, params, call
       var tmp = et.SubElement(action, paramName);
       var value = params[paramName];
       tmp.text = (value === null)
-        ? '' 
-        : params[paramName].toString();
+        ? ''
+        : value.toString();
     });
 
     var doc = new et.ElementTree(envelope);
-    var xml = doc.write({ 
+    var xml = doc.write({
       xml_declaration: true,
     });
 
@@ -133,11 +133,11 @@ DeviceClient.prototype.callAction = function(serviceId, actionName, params, call
 
     var req = http.request(options, function(req) {
       req.pipe(concat(function(buf) {
-        var doc = et.parse(buf.toString());
+        var doc = et.parse(cleanString(buf.toString()));
 
         if(req.statusCode !== 200) {
           var errorCode = doc.findtext('.//errorCode');
-          var errorDescription = doc.findtext('.//errorDescription').trim();
+          var errorDescription = (doc.findtext('.//errorDescription') || '').trim();
 
           var err = new Error(errorDescription + ' (' + errorCode + ')');
           err.code = 'EUPNP';
@@ -158,7 +158,7 @@ DeviceClient.prototype.callAction = function(serviceId, actionName, params, call
           result[name] = doc.findtext('.//' + name);
         });
 
-        callback(null, result)        
+        callback(null, result)
       }));
     });
 
@@ -239,7 +239,6 @@ DeviceClient.prototype.subscribe = function(serviceId, listener) {
             if(res.statusCode !== 200) {
               var err = new Error('SUBSCRIBE renewal error');
               err.statusCode = res.statusCode;
-              console.log('SUBSCRIBE renewal error', res);
               // XXX: should we clear the subscription and release the server here ?
               self.emit('error', err);
               return;
@@ -271,8 +270,6 @@ DeviceClient.prototype.subscribe = function(serviceId, listener) {
           listeners: [listener]
         };
 
-        console.log('SUBSCRIBED', serviceId);
-
       });
 
       req.on('error', function(err) {
@@ -280,7 +277,7 @@ DeviceClient.prototype.subscribe = function(serviceId, listener) {
         self.emit('error', err);
       });
 
-      req.end(); 
+      req.end();
     });
 
   });
@@ -332,7 +329,6 @@ DeviceClient.prototype.unsubscribe = function(serviceId, listener) {
 
       delete self.pendingUnsubscriptions[serviceId];
       self.emit('unsubscribed:' + serviceId);
-      console.log('UNSUBSCRIBED', serviceId);
     });
 
     req.on('error', function(err) {
@@ -341,7 +337,7 @@ DeviceClient.prototype.unsubscribe = function(serviceId, listener) {
       self.emit('unsubscribed:' + serviceId);
     });
 
-    req.end(); 
+    req.end();
   }
 };
 
@@ -365,7 +361,6 @@ DeviceClient.prototype.ensureEventingServer = function(callback) {
           return self.subscriptions[key].sid;
         })
 
-        console.log(sid, seq, events);
         var idx = sids.indexOf(sid);
         if(idx === -1) {
           debug('WARNING unknown SID %s', sid);
@@ -417,7 +412,7 @@ DeviceClient.prototype.releaseEventingServer = function() {
 
 function parseEvents(buf) {
   var events = [];
-  var doc = et.parse(buf.toString());
+  var doc = et.parse(cleanString(buf.toString()));
 
   var lastChange = doc.findtext('.//LastChange');
   if(lastChange) {
@@ -429,11 +424,12 @@ function parseEvents(buf) {
     // subtree per stream instance reporting its status.
     var instances = doc.findall('./InstanceID');
     instances.forEach(function(instance) {
-      var data = { 
-        InstanceID: Number(instance.get('val')) 
+      var data = {
+        InstanceID: Number(instance.get('val'))
       };
       instance.findall('./*').forEach(function(node) {
-        data[node.tag] = node.get('val');
+        var tagSuffix = node.get('channel');
+        data[node.tag + (tagSuffix && !tagSuffix.match(/master/i) ? '_' + tagSuffix : '')] = node.get('val');
       });
       events.push(data);
     });
@@ -457,14 +453,14 @@ function parseTimeout(header) {
 
 
 function parseDeviceDescription(xml, url) {
-  var doc = et.parse(xml);
+  var doc = et.parse(cleanString(xml));
 
   var desc = extractFields(doc.find('./device'), [
-    'deviceType', 
-    'friendlyName', 
-    'manufacturer', 
-    'manufacturerURL', 
-    'modelName', 
+    'deviceType',
+    'friendlyName',
+    'manufacturer',
+    'manufacturerURL',
+    'modelName',
     'modelNumber',
     'modelDescription',
     'UDN'
@@ -517,7 +513,7 @@ function parseDeviceDescription(xml, url) {
 
 
 function parseServiceDescription(xml) {
-  var doc = et.parse(xml);
+  var doc = et.parse(cleanString(xml));
   var desc = {};
 
   desc.actions = {};
@@ -617,10 +613,15 @@ function extractBaseUrl(url) {
 
 
 function resolveService(serviceId) {
-  return (serviceId.indexOf(':') === -1) 
-    ? 'urn:upnp-org:serviceId:' + serviceId 
-    : serviceId;  
+  return (serviceId.indexOf(':') === -1)
+    ? 'urn:upnp-org:serviceId:' + serviceId
+    : serviceId;
 }
 
+function cleanString(str) {
+  return str
+    .replace(/&(?![a-zA-Z]{1,10};)/g, '&amp;')
+    .replace(/(<([a-zA-Z][^>\/\s]*)((\s[^>]*[^\/])|\s)?)>(?!(.|\n|\r)*<\/\2>)/g, '$1/>');
+}
 
 module.exports = DeviceClient;
