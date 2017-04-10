@@ -24,6 +24,7 @@ function DeviceClient(url) {
   this.server = null;
   this.listening = false;
   this.subscriptions = {};
+  this.pendingUnsubscriptions = {};
 }
 
 util.inherits(DeviceClient, EventEmitter);
@@ -108,15 +109,21 @@ DeviceClient.prototype.callAction = function(serviceId, actionName, params, call
     Object.keys(params).forEach(function(paramName) {
       var tmp = et.SubElement(action, paramName);
       var value = params[paramName];
+      console.log(paramName, value, typeof value === 'object', value.constructor, value.constructor.name === 'Element');
+      if(typeof value === 'object' && value.constructor && value.constructor.name === 'Element'){
+        return tmp.append(value);
+      }
       tmp.text = (value === null)
-        ? '' 
-        : params[paramName].toString();
+        ? ''
+        : value.toString();
     });
 
     var doc = new et.ElementTree(envelope);
-    var xml = doc.write({ 
+    var xml = doc.write({
       xml_declaration: true,
     });
+
+    console.log('SENDING', xml);
 
     // Send action request
     var options = parseUrl(service.controlURL);
@@ -130,17 +137,17 @@ DeviceClient.prototype.callAction = function(serviceId, actionName, params, call
 
     debug('call action %s on service %s with params %j', actionName, serviceId, params);
 
-    var req = http.request(options, function(res) {
-      res.pipe(concat(function(buf) {
-        var doc = et.parse(buf.toString());
+    var req = http.request(options, function(req) {
+      req.pipe(concat(function(buf) {
+        var doc = et.parse(cleanString(buf.toString()));
 
-        if(res.statusCode !== 200) {
+        if(req.statusCode !== 200) {
           var errorCode = doc.findtext('.//errorCode');
-          var errorDescription = doc.findtext('.//errorDescription').trim();
+          var errorDescription = (doc.findtext('.//errorDescription') || '').trim();
 
           var err = new Error(errorDescription + ' (' + errorCode + ')');
           err.code = 'EUPNP';
-          err.statusCode = res.statusCode;
+          err.statusCode = req.statusCode;
           err.errorCode = errorCode;
           return callback(err);
         }
@@ -157,7 +164,7 @@ DeviceClient.prototype.callAction = function(serviceId, actionName, params, call
           result[name] = doc.findtext('.//' + name);
         });
 
-        callback(null, result)        
+        callback(null, result)
       }));
     });
 
@@ -171,6 +178,11 @@ DeviceClient.prototype.subscribe = function(serviceId, listener) {
   var self = this;
   serviceId = resolveService(serviceId);
 
+  if(this.pendingUnsubscriptions[serviceId]) {
+    this.once('unsubscribed:' + serviceId, function () {
+      self.subscribe(serviceId, listener);
+    });
+  }
   if(this.subscriptions[serviceId]) {
     // If we already have a subscription to this service,
     // add the provided callback to the listeners and return
@@ -271,7 +283,7 @@ DeviceClient.prototype.subscribe = function(serviceId, listener) {
         self.emit('error', err);
       });
 
-      req.end(); 
+      req.end();
     });
 
   });
@@ -289,6 +301,9 @@ DeviceClient.prototype.unsubscribe = function(serviceId, listener) {
   // ... and we know about this listener
   var idx = subscription.listeners.indexOf(listener);
   if(idx === -1) return;
+
+  // Then register the subscription to an unsubscribe list to prevent race conditions with subscribe
+  this.pendingUnsubscriptions[serviceId] = true;
 
   // Remove the listener from the list
   subscription.listeners.splice(idx, 1);
@@ -317,13 +332,18 @@ DeviceClient.prototype.unsubscribe = function(serviceId, listener) {
       // Make sure the eventing server is shutdown if there is no
       // subscription left for any service
       self.releaseEventingServer();
+
+      delete self.pendingUnsubscriptions[serviceId];
+      self.emit('unsubscribed:' + serviceId);
     });
 
     req.on('error', function(err) {
       self.emit('error', err);
+      delete this.pendingUnsubscriptions[serviceId];
+      self.emit('unsubscribed:' + serviceId);
     });
 
-    req.end(); 
+    req.end();
   }
 };
 
@@ -365,6 +385,9 @@ DeviceClient.prototype.ensureEventingServer = function(callback) {
           });
         });
 
+        // Send 200 response to UPnP device
+        res.statusCode = 200;
+        res.end()
       }));
 
     });
@@ -395,23 +418,24 @@ DeviceClient.prototype.releaseEventingServer = function() {
 
 function parseEvents(buf) {
   var events = [];
-  var doc = et.parse(buf.toString());
+  var doc = et.parse(cleanString(buf.toString()));
 
   var lastChange = doc.findtext('.//LastChange');
   if(lastChange) {
     // AVTransport and RenderingControl services embed event data
     // in an `<Event></Event>` element stored as an URIencoded string.
-    doc = et.parse(lastChange);
+    doc = et.parse(cleanString(lastChange));
 
     // The `<Event></Event>` element contains one `<InstanceID></InstanceID>`
     // subtree per stream instance reporting its status.
     var instances = doc.findall('./InstanceID');
     instances.forEach(function(instance) {
-      var data = { 
-        InstanceID: Number(instance.get('val')) 
+      var data = {
+        InstanceID: Number(instance.get('val'))
       };
       instance.findall('./*').forEach(function(node) {
-        data[node.tag] = node.get('val');
+        var tagSuffix = node.get('channel');
+        data[node.tag + (tagSuffix && !tagSuffix.match(/master/i) ? '_' + tagSuffix : '')] = node.get('val');
       });
       events.push(data);
     });
@@ -435,20 +459,20 @@ function parseTimeout(header) {
 
 
 function parseDeviceDescription(xml, url) {
-  var doc = et.parse(xml);
+  var doc = et.parse(cleanString(xml));
 
   var desc = extractFields(doc.find('./device'), [
-    'deviceType', 
-    'friendlyName', 
-    'manufacturer', 
-    'manufacturerURL', 
-    'modelName', 
+    'deviceType',
+    'friendlyName',
+    'manufacturer',
+    'manufacturerURL',
+    'modelName',
     'modelNumber',
     'modelDescription',
     'UDN'
   ]);
 
-  var nodes = doc.findall('./device/iconList/icon');
+  var nodes = doc.findall('.//device/iconList/icon');
   desc.icons = nodes.map(function(icon) {
     return extractFields(icon, [
       'mimetype',
@@ -495,7 +519,7 @@ function parseDeviceDescription(xml, url) {
 
 
 function parseServiceDescription(xml) {
-  var doc = et.parse(xml);
+  var doc = et.parse(cleanString(xml));
   var desc = {};
 
   desc.actions = {};
@@ -595,10 +619,16 @@ function extractBaseUrl(url) {
 
 
 function resolveService(serviceId) {
-  return (serviceId.indexOf(':') === -1) 
-    ? 'urn:upnp-org:serviceId:' + serviceId 
-    : serviceId;  
+  return (serviceId.indexOf(':') === -1)
+    ? 'urn:upnp-org:serviceId:' + serviceId
+    : serviceId;
 }
 
+function cleanString(str) {
+  return str
+    .replace(/&(?![a-zA-Z]{1,10};)/g, '&amp;')
+    .replace(/(<([a-zA-Z][^>\/\s]*)((\s[^>]*[^\/])|\s)?)>(?!(.|\n|\r)*<\/\2>)/g, '$1/>')
+    .match(/((<\?xml[^?]*\?>)?\s*<([a-zA-Z][^\s\/>]*)[\S\s]*?<\/\3[^>]*>)/)[0];
+}
 
 module.exports = DeviceClient;
