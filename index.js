@@ -109,6 +109,10 @@ DeviceClient.prototype.callAction = function(serviceId, actionName, params, call
     Object.keys(params).forEach(function(paramName) {
       var tmp = et.SubElement(action, paramName);
       var value = params[paramName];
+      console.log(paramName, value, typeof value === 'object', value.constructor, value.constructor.name === 'Element');
+      if(typeof value === 'object' && value.constructor && value.constructor.name === 'Element'){
+        return tmp.append(value);
+      }
       tmp.text = (value === null)
         ? ''
         : value.toString();
@@ -118,6 +122,8 @@ DeviceClient.prototype.callAction = function(serviceId, actionName, params, call
     var xml = doc.write({
       xml_declaration: true,
     });
+
+    console.log('SENDING', xml);
 
     // Send action request
     var options = parseUrl(service.controlURL);
@@ -418,7 +424,7 @@ function parseEvents(buf) {
   if(lastChange) {
     // AVTransport and RenderingControl services embed event data
     // in an `<Event></Event>` element stored as an URIencoded string.
-    doc = et.parse(lastChange);
+    doc = et.parse(cleanString(lastChange));
 
     // The `<Event></Event>` element contains one `<InstanceID></InstanceID>`
     // subtree per stream instance reporting its status.
@@ -621,7 +627,8 @@ function resolveService(serviceId) {
 function cleanString(str) {
   return str
     .replace(/&(?![a-zA-Z]{1,10};)/g, '&amp;')
-    .replace(/(<([a-zA-Z][^>\/\s]*)((\s[^>]*[^\/])|\s)?)>(?!(.|\n|\r)*<\/\2>)/g, '$1/>');
+    .replace(/(<([a-zA-Z][^>\/\s]*)((\s[^>]*[^\/])|\s)?)>(?!(.|\n|\r)*<\/\2>)/g, '$1/>')
+    .match(/((<\?xml[^?]*\?>)?\s*<([a-zA-Z][^\s\/>]*)[\S\s]*?<\/\3[^>]*>)/)[0];
 }
 
 module.exports = DeviceClient;
