@@ -123,7 +123,7 @@ DeviceClient.prototype.callAction = function(serviceId, actionName, params, call
     options.method = 'POST';
     options.headers = {
       'Content-Type': 'text/xml; charset="utf-8"',
-      'Content-Length': xml.length,
+      'Content-Length': Buffer.from(xml).length,
       'Connection': 'close',
       'SOAPACTION': '"' + service.serviceType + '#' + actionName + '"'
     };
