@@ -350,6 +350,8 @@ DeviceClient.prototype.ensureEventingServer = function(callback) {
         var idx = sids.indexOf(sid);
         if(idx === -1) {
           debug('WARNING unknown SID %s', sid);
+          res.writeHead(404);
+          res.end()
           // silently ignore unknown SIDs
           return;
         }
@@ -364,6 +366,8 @@ DeviceClient.prototype.ensureEventingServer = function(callback) {
             listener(e);
           });
         });
+        res.writeHead(200);
+        res.end();
 
       }));
 
