@@ -132,11 +132,21 @@ DeviceClient.prototype.callAction = function(serviceId, actionName, params, call
 
     var req = http.request(options, function(res) {
       res.pipe(concat(function(buf) {
-        var doc = et.parse(buf.toString());
+        var doc;
+        try {
+          doc = et.parse(buf.toString());
+        } catch(parseErr) {
+          // Some UPnP devices return malformed XML. Surface that as an
+          // action error instead of letting the parser exception terminate
+          // the entire process.
+          parseErr.code = 'EUPNP';
+          parseErr.statusCode = res.statusCode;
+          return callback(parseErr);
+        }
 
         if(res.statusCode !== 200) {
           var errorCode = doc.findtext('.//errorCode');
-          var errorDescription = doc.findtext('.//errorDescription').trim();
+          var errorDescription = (doc.findtext('.//errorDescription') || 'UPnP action failed').trim();
 
           var err = new Error(errorDescription + ' (' + errorCode + ')');
           err.code = 'EUPNP';
@@ -336,9 +346,24 @@ DeviceClient.prototype.ensureEventingServer = function(callback) {
     this.server = http.createServer(function(req, res) {
 
       req.pipe(concat(function(buf) {
+        // A renderer expects every event notification to be acknowledged.
+        // End the response before parsing so even malformed notifications do
+        // not get retried indefinitely by the device.
+        res.statusCode = 200;
+        res.end();
+
         var sid = req.headers['sid'];
         var seq = req.headers['seq'];
-        var events = parseEvents(buf);
+        var events;
+        try {
+          events = parseEvents(buf);
+        } catch(err) {
+          // Broken renderers sometimes put an unescaped query string in the
+          // embedded LastChange XML. Ignore that notification rather than
+          // crashing the process and interrupting playback.
+          debug('ignore malformed event %s %d: %s', sid, seq, err.message);
+          return;
+        }
 
         debug('received events %s %d %j', sid, seq, events);
 
